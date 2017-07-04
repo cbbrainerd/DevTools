@@ -30,7 +30,7 @@ dataTree.Branch('m_ggg_weight',ggg_mass_weight_arr,'m_ggg_weight/F')
 mcTree.Branch('m_ggg',ggg_mass_arr,'m_ggg/F')
 mcTree.Branch('m_ggg_weight',ggg_mass_weight_arr,'m_ggg_weight/F')
 
-def setStyle(pad,position=11,preliminary=True,personal=True,period_int=4):
+def setStyle(pad,position=11,preliminary=False,personal=True,period_int=4):
     '''Set style for plots based on the CMS TDR style guidelines.
        https://twiki.cern.ch/twiki/bin/view/CMS/Internal/PubGuidelines#Figures_and_tables
        https://ghm.web.cern.ch/ghm/plots/'''
@@ -131,8 +131,14 @@ def createRatio(h1, h2):
     return h3
 
 Datasets='''
+DYJetsToLL_M-10to50_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8
+DYJetsToLL_M-50_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8
 DiPhotonJets_MGG-80toInf_13TeV_amcatnloFXFX_pythia8
+DiPhotonJetsBox_M40_80-Sherpa
+DiPhotonJetsBox_MGG-80toInf_13TeV-Sherpa
 DoubleEG
+DoubleMuon
+SingleElectron
 SinglePhoton
 TGJets_TuneCUETP8M1_13TeV_amcatnlo_madspin_pythia8
 TTGG_0Jets_TuneCUETP8M1_13TeV_amcatnlo_madspin_pythia8
@@ -150,13 +156,13 @@ ZGGToNuNuGG_5f_TuneCUETP8M1_13TeV-amcatnlo-pythia8
 ZGTo2LG_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8
 '''.split('\n')
 
-mcHists=dict((dataset,ROOT.TH1D(dataset,dataset,numBin,minGeV,maxGeV)) for dataset in Datasets if not isData(dataset))
+mcHists=dict((dataset,ROOT.TH1D(dataset,dataset,numBin,minGeV,maxGeV)) for dataset in allDatasets if not isData(dataset))
 
 for datasetDir in datasets:
     numberOfEvents=0
     ggg_mass=[]
     dataset='_'.join([x for x in datasetDir.split('_') if x not in '_'.join((analysis,date,'crab')).split('_')])
-    if dataset not in Datasets:
+    if dataset not in allDatasets:
         continue
     xsec=getXsec(dataset)
     isMC=not isData(dataset)
@@ -168,11 +174,16 @@ for datasetDir in datasets:
     for fn in os.listdir(resultsDir):
         print 'Opening input file %s' % (fn)
         f=ROOT.TFile.Open('/'.join((resultsDir,fn)),'read')
+        numberOfEvents=0
         for event in f.ThreePhotonTree:
             if (event.g1_mvaNonTrigValues > -.2 and event.g2_mvaNonTrigValues > -.2 and event.g3_mvaNonTrigValues > -.2):
                 ggg_mass.append(event.ggg_mass)
-    numberOfEvents=len(ggg_mass)
-    eventWeight=luminosity*xsec/numberOfEvents if isMC else 1 #???
+                numberOfEvents+=f.summedWeights.GetBinContent(1)
+    if (len(ggg_mass)==0): #If there are no events in the whole dataset, we don't need the histogram
+        if isMC:
+            del mcHists[dataset]
+        continue
+    eventWeight=luminosity*xsec/float(numberOfEvents) if isMC else 1 #???
     outputLog.write('%s\nEvents: %i\nWeight: %0.1f\n' % (dataset,numberOfEvents,eventWeight))
     for x in ggg_mass:
         ggg_mass_arr[0]=x
@@ -222,6 +233,7 @@ ratioHist=createRatio(dTH1D,gTH1D)
 ratioHist.GetYaxis().SetRangeUser(0,2)
 ratioHist.SetTitle(';m_{ggg} [GeV];MC/Data')
 ratioHist.Draw()
+setStyle(gCanvas)
 
 gCanvas.Print('ratio.pdf')
 
