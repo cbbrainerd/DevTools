@@ -8,6 +8,16 @@ from DevTools.Plotter.utilities import getLumi, isData, hashFile, hashString, py
 from DevTools.Plotter.Plotter import Plotter
 import DevTools.Plotter.CMS_lumi as CMS_lumi
 
+binSize=25
+maxGeV=1000
+minGeV=0
+
+if((maxGeV-minGeV)%binSize):
+    print 'Bin size should evenly divide range.'
+    raise SystemExit
+else:
+    numBin=(maxGeV-minGeV)/binSize
+
 outputLog=open('test.log','w')
 
 of=ROOT.TFile('output.root','RECREATE')
@@ -48,8 +58,8 @@ print luminosity
 
 gCanvas=ROOT.TCanvas()
 gCanvas.cd()
-gTH1D=ROOT.TH1D('mc','mc',100,0,1000)
-dTH1D=ROOT.TH1D('data','data',100,0,1000)
+gTH1D=ROOT.TH1D('mc','mc',numBin,minGeV,maxGeV)
+dTH1D=ROOT.TH1D('data','data',numBin,minGeV,maxGeV)
 
 allDatasets='''
 DYJetsToLL_M-10to50_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8
@@ -121,29 +131,16 @@ def createRatio(h1, h2):
     return h3
 
 Datasets='''
-DYJetsToLL_M-10to50_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8
-DYJetsToLL_M-50_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8
 DiPhotonJets_MGG-80toInf_13TeV_amcatnloFXFX_pythia8
 DoubleEG
-DoubleMuon
-SingleElectron
 SinglePhoton
 TGJets_TuneCUETP8M1_13TeV_amcatnlo_madspin_pythia8
 TTGG_0Jets_TuneCUETP8M1_13TeV_amcatnlo_madspin_pythia8
 TTGJets_TuneCUETP8M1_13TeV-amcatnloFXFX-madspin-pythia8
-TTJets_DiLept_TuneCUETP8M1_13TeV-madgraphMLM-pythia8
-TTJets_SingleLeptFromT_TuneCUETP8M1_13TeV-madgraphMLM-pythia8
-TTJets_SingleLeptFromTbar_TuneCUETP8M1_13TeV-madgraphMLM-pythia8
-TTJets_TuneCUETP8M1_13TeV-madgraphMLM-pythia8
-W1JetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8
-W2JetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8
-W3JetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8
-W4JetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8
 WGGJets_TuneCUETP8M1_13TeV_madgraphMLM_pythia8
 WGG_5f_TuneCUETP8M1_13TeV-amcatnlo-pythia8
 WGToLNuG_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8
 WGToLNuG_TuneCUETP8M1_13TeV-madgraphMLM-pythia8
-WJetsToLNu_TuneCUETP8M1_13TeV-madgraphMLM-pythia8
 WWG_TuneCUETP8M1_13TeV-amcatnlo-pythia8
 WZG_TuneCUETP8M1_13TeV-amcatnlo-pythia8
 ZGGJetsToLLGG_5f_LO_amcatnloMLM_pythia8
@@ -153,7 +150,7 @@ ZGGToNuNuGG_5f_TuneCUETP8M1_13TeV-amcatnlo-pythia8
 ZGTo2LG_TuneCUETP8M1_13TeV-amcatnloFXFX-pythia8
 '''.split('\n')
 
-mcHists=dict((dataset,ROOT.TH1D(dataset,dataset,100,0,1000)) for dataset in Datasets if not isData(dataset))
+mcHists=dict((dataset,ROOT.TH1D(dataset,dataset,numBin,minGeV,maxGeV)) for dataset in Datasets if not isData(dataset))
 
 for datasetDir in datasets:
     numberOfEvents=0
@@ -172,9 +169,10 @@ for datasetDir in datasets:
         print 'Opening input file %s' % (fn)
         f=ROOT.TFile.Open('/'.join((resultsDir,fn)),'read')
         for event in f.ThreePhotonTree:
-            ggg_mass.append(event.ggg_mass)
+            if (event.g1_mvaNonTrigValues > -.2 and event.g2_mvaNonTrigValues > -.2 and event.g3_mvaNonTrigValues > -.2):
+                ggg_mass.append(event.ggg_mass)
     numberOfEvents=len(ggg_mass)
-    eventWeight=luminosity*xsec/numberOfEvents/1000 if isMC else 1 #???
+    eventWeight=luminosity*xsec/numberOfEvents if isMC else 1 #???
     outputLog.write('%s\nEvents: %i\nWeight: %0.1f\n' % (dataset,numberOfEvents,eventWeight))
     for x in ggg_mass:
         ggg_mass_arr[0]=x
@@ -203,10 +201,29 @@ gCanvas.BuildLegend()
 gCanvas.SetLogy()
 
 gCanvas.Print('output.pdf')
-ratioPlot=createRatio(gTH1D,dTH1D)
-ratio.Draw()
-gCanvas.Print('ratio.pdf')
+dTH1D.SetTitle('Data;;')
+dTH1D.Draw('')
+ths.Draw('HIST SAME')
+canvasratio=0.3
+gCanvas.SetBottomMargin(canvasratio + (1-canvasratio)*gCanvas.GetBottomMargin()-canvasratio*gCanvas.GetTopMargin())
+ratioPad=ROOT.TPad('BottomPad','',0,0,1,1)
+ratioPad.SetTopMargin((1-canvasratio) - (1-canvasratio)*ratioPad.GetBottomMargin()+canvasratio*ratioPad.GetTopMargin())
 
+ratioPad.SetFillStyle(4000);
+ratioPad.SetFillColor(4000);
+ratioPad.SetFrameFillColor(4000);
+ratioPad.SetFrameFillStyle(4000);
+ratioPad.SetFrameBorderMode(0);
+ratioPad.SetTicks(1,1);
+ratioPad.Draw();
+gCanvas.BuildLegend()
+ratioPad.cd();
+ratioHist=createRatio(dTH1D,gTH1D)
+ratioHist.GetYaxis().SetRangeUser(0,2)
+ratioHist.SetTitle(';m_{ggg} [GeV];MC/Data')
+ratioHist.Draw()
+
+gCanvas.Print('ratio.pdf')
 
 of.Write()
 of.Close()
